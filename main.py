@@ -11,6 +11,8 @@ from dataset import data_loader
 from neural_methods import trainer
 from unsupervised_methods.unsupervised_predictor import unsupervised_predict
 from torch.utils.data import DataLoader
+import wandb
+import pickle
 
 RANDOM_SEED = 100
 torch.manual_seed(RANDOM_SEED)
@@ -37,8 +39,10 @@ def seed_worker(worker_id):
 
 def add_args(parser):
     """Adds arguments for parser."""
+    #parser.add_argument('--config_file', required=False,
+    #                    default="configs/train_configs/PURE_PURE_UBFC_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
     parser.add_argument('--config_file', required=False,
-                        default="configs/train_configs/PURE_PURE_UBFC_TSCAN_BASIC.yaml", type=str, help="The name of the model.")
+                        default="configs/infer_configs/PURE_UBFC_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
     '''Neural Method Sample YAMSL LIST:
       SCAMPS_SCAMPS_UBFC_TSCAN_BASIC.yaml
       SCAMPS_SCAMPS_UBFC_DEEPPHYS_BASIC.yaml
@@ -73,8 +77,11 @@ def train_and_test(config, data_loader_dict):
         model_trainer = trainer.DeepPhysTrainer.DeepPhysTrainer(config, data_loader_dict)
     else:
         raise ValueError('Your Model is Not Supported  Yet!')
+    wandb.init(project="rPPGToolbox-NIVSDiagnostic", entity="nivs-uom",
+               name=f"{config.TRAIN.MODEL_FILE_NAME}")
     model_trainer.train(data_loader_dict)
     model_trainer.test(data_loader_dict)
+    wandb.finish()
 
 
 def test(config, data_loader_dict):
@@ -188,7 +195,7 @@ if __name__ == "__main__":
                 config_data=config.VALID.DATA)
             data_loader_dict["valid"] = DataLoader(
                 dataset=valid_data,
-                num_workers=16,
+                num_workers=1,
                 batch_size=config.TRAIN.BATCH_SIZE,  # batch size for val is the same as train
                 shuffle=False,
                 worker_init_fn=seed_worker,
@@ -225,7 +232,7 @@ if __name__ == "__main__":
                 config_data=config.TEST.DATA)
             data_loader_dict["test"] = DataLoader(
                 dataset=test_data,
-                num_workers=16,
+                num_workers=1,
                 batch_size=config.INFERENCE.BATCH_SIZE,
                 shuffle=False,
                 worker_init_fn=seed_worker,
@@ -256,7 +263,7 @@ if __name__ == "__main__":
             config_data=config.UNSUPERVISED.DATA)
         data_loader_dict["unsupervised"] = DataLoader(
             dataset=unsupervised_data,
-            num_workers=16,
+            num_workers=1,
             batch_size=1,
             shuffle=False,
             worker_init_fn=seed_worker,

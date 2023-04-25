@@ -12,6 +12,7 @@ from neural_methods.loss.NegPearsonLoss import Neg_Pearson
 from neural_methods.model.DeepPhys import DeepPhys
 from neural_methods.trainer.BaseTrainer import BaseTrainer
 from tqdm import tqdm
+import wandb
 
 
 class DeepPhysTrainer(BaseTrainer):
@@ -78,11 +79,15 @@ class DeepPhysTrainer(BaseTrainer):
                         f'[{epoch}, {idx + 1:5d}] loss: {running_loss / 100:.3f}')
                     running_loss = 0.0
                 train_loss.append(loss.item())
+                wandb.log({"loss": loss.item()})
                 tbar.set_postfix({"loss": loss.item(), "lr": self.optimizer.param_groups[0]["lr"]})
+
+
             self.save_model(epoch)
             if not self.config.TEST.USE_LAST_EPOCH: 
                 valid_loss = self.valid(data_loader)
                 print('validation loss: ', valid_loss)
+                wandb.log({"val loss": valid_loss.item()})
                 if self.min_valid_loss is None:
                     self.min_valid_loss = valid_loss
                     self.best_epoch = epoch

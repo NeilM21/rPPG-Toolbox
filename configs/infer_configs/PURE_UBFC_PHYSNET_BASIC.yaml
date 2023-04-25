@@ -8,8 +8,8 @@ TEST:
     DATASET: UBFC
     DO_PREPROCESS: False                  # if first time, should be true
     DATA_FORMAT: NCDHW
-    DATA_PATH: "/gscratch/ubicomp/xliu0/data3/mnt/Datasets/UBFC/RawData"                     # Raw dataset path, need to be updated
-    CACHED_PATH: "/gscratch/ubicomp/xliu0/data3/mnt/Datasets/rppg_toolbox/PreprocessedData"    # Processed dataset save path, need to be updated
+    DATA_PATH: "C:/NIVS Project/UBFC Experiments/UBFC-rPPG/UBFC_DATASET/DATASET_2"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "C:/NIVS Project/UBFC Experiments/UBFC-rPPG/PreprocessedData"    # Processed dataset save path, need to be updated
     EXP_DATA_NAME: ""
     BEGIN: 0.0
     END: 1.0
@@ -25,6 +25,7 @@ TEST:
       LARGE_BOX_COEF: 1.5
       H: 72
       W: 72
+
 DEVICE: cuda:0
 NUM_OF_GPU_TRAIN: 1
 LOG:
@@ -35,6 +36,6 @@ MODEL:
   PHYSNET:
     FRAME_NUM: 128
 INFERENCE:
-  BATCH_SIZE: 4
-  EVALUATION_METHOD: FFT        # "FFT" or "peak detection"
-  MODEL_PATH: "./final_model_release/PURE_PhysNet_Normalized.pth"
+  BATCH_SIZE: 2
+  EVALUATION_METHOD: peak detection        # "FFT" or "peak detection"
+  MODEL_PATH: "./final_model_release/PURE_PhysNet_DiffNormalized.pth"

@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.optim as optim
 from evaluation.metrics import calculate_metrics
 from neural_methods.loss.PhysNetNegPearsonLoss import Neg_Pearson
@@ -11,7 +12,8 @@ from neural_methods.model.PhysNet import PhysNet_padding_Encoder_Decoder_MAX
 from neural_methods.trainer.BaseTrainer import BaseTrainer
 from torch.autograd import Variable
 from tqdm import tqdm
-
+import wandb
+import matplotlib.pyplot as plt
 
 class PhysnetTrainer(BaseTrainer):
 
@@ -56,7 +58,7 @@ class PhysnetTrainer(BaseTrainer):
             running_loss = 0.0
             train_loss = []
             self.model.train()
-            tbar = tqdm(data_loader["train"], ncols=80)
+            tbar = tqdm(data_loader["train"], ncols=80, mode="ascii")
             for idx, batch in enumerate(tbar):
                 tbar.set_description("Train epoch %s" % epoch)
                 rPPG, x_visual, x_visual3232, x_visual1616 = self.model(
@@ -74,6 +76,8 @@ class PhysnetTrainer(BaseTrainer):
                         f'[{epoch}, {idx + 1:5d}] loss: {running_loss / 100:.3f}')
                     running_loss = 0.0
                 train_loss.append(loss.item())
+                wandb.log({"loss": loss.item()})
+
                 self.optimizer.step()
                 self.scheduler.step()
                 self.optimizer.zero_grad()
@@ -82,6 +86,8 @@ class PhysnetTrainer(BaseTrainer):
             if not self.config.TEST.USE_LAST_EPOCH: 
                 valid_loss = self.valid(data_loader)
                 print('validation loss: ', valid_loss)
+                wandb.log({"val loss": valid_loss.item()})
+
                 if self.min_valid_loss is None:
                     self.min_valid_loss = valid_loss
                     self.best_epoch = epoch
@@ -154,11 +160,16 @@ class PhysnetTrainer(BaseTrainer):
 
         self.model = self.model.to(self.config.DEVICE)
         self.model.eval()
+
         with torch.no_grad():
-            for _, test_batch in enumerate(data_loader['test']):
+            for batch_cnt, test_batch in enumerate(data_loader['test']):
                 batch_size = test_batch[0].shape[0]
                 data, label = test_batch[0].to(
                     self.config.DEVICE), test_batch[1].to(self.config.DEVICE)
+
+                # Generate Feature Maps
+                self.generate_visualizations(im_data=data, batch_cnt=batch_cnt)
+
                 pred_ppg_test, _, _, _ = self.model(data)
                 for idx in range(batch_size):
                     subj_index = test_batch[2][idx]
@@ -177,5 +188,72 @@ class PhysnetTrainer(BaseTrainer):
             os.makedirs(self.model_dir)
         model_path = os.path.join(
             self.model_dir, self.model_file_name + '_Epoch' + str(index) + '.pth')
+
+        model_path = os.path.abspath(model_path)
+        if model_path.startswith(u"\\\\"):
+            model_path = u"\\\\?\\UNC\\" + model_path[2:]
+        else:
+            model_path = u"\\\\?\\" + model_path
+
         torch.save(self.model.state_dict(), model_path)
         print('Saved Model Path: ', model_path)
+
+    def generate_visualizations(self, im_data, batch_cnt):
+        # ============================= FEATURE VISUALIZATION BLOCK ===============================
+        model_weights = list()
+        conv_layers = list()
+        counter = 0
+
+        # from [N, C, D, H, W] to [C, D, H, W]
+        im_data = im_data[0, :]
+
+        model_children = list(self.model.children())
+        for i in range(len(model_children)):
+            if type(model_children[i]) == nn.Conv3d:
+                counter += 1
+                model_weights.append(model_children[i].weight)
+                conv_layers.append(model_children[i])
+
+            elif type(model_children[i]) == nn.Sequential:
+                for child in model_children[i].children():
+                    if type(child) == nn.Conv3d:
+                        counter += 1
+                        model_weights.append(child.weight)
+                        conv_layers.append(child)
+
+        #print(f"Total Convolutional Layers: {counter}")
+        #print("conv_layers")
+        layer_out = list()
+        names = list()
+
+        # Get Model Layers
+        for layer in conv_layers[0:]:
+            im_data = layer(im_data)
+            layer_out.append(im_data)
+            names.append(str(layer))
+            pass
+
+        processed = []
+        # layer_out = [x.cpu().numpy() for x in layer_out]
+        for feature_map in layer_out:
+            # Taking the first frame only
+            feature_map = feature_map[:, 0, :, :]
+            # Squeeze unnecessary as we do not have a batch size dimension
+            # feature_map = feature_map.squeeze(0)
+            gray_scale = torch.sum(feature_map, 0)
+            gray_scale = gray_scale / feature_map.shape[0]
+            processed.append(gray_scale.data.cpu().numpy())
+
+        # for fm in processed:
+        #    print(fm.shape)
+
+        fig = plt.figure(figsize=(20, 40))
+        for map_idx in range(0, len(processed)):
+            a = fig.add_subplot(5, 2, map_idx + 1)
+            plt.imshow(processed[map_idx])
+            a.axis("off")
+            a.set_title(f"{names[map_idx].split('(')[0]}_{map_idx + 1}", fontsize=25)
+
+        plt.savefig(f"C:/NIVS Project/UBFC Experiments/FeatureViz/feature_maps_batch_{batch_cnt}.jpg",
+                    bbox_inches='tight')
+        plt.close()

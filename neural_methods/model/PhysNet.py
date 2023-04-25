@@ -91,6 +91,7 @@ class PhysNet_padding_Encoder_Decoder_MAX(nn.Module):
         self.poolspa = nn.AdaptiveAvgPool3d((frames, 1, 1))
 
     def forward(self, x):  # Batch_size*[3, T, 128,128]
+
         x_visual = x
         [batch, channel, length, width, height] = x.shape
 
