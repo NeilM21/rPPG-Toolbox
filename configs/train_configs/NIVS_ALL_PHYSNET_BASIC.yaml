@@ -1,0 +1,103 @@
+BASE: ['']
+TOOLBOX_MODE: "train_and_test"  # "train_and_test"  or "only_test"
+TRAIN:
+  BATCH_SIZE: 2
+  EPOCHS: 20
+  LR: 1e-3
+  #NIVST_NoLBox_Exp1_std_stdlabel_128x128_0_LR1e-3_dydet32
+  MODEL_FILE_NAME: NIVST_PhysNet_NoLBox_Exp1_1_raw_raw_128x128_0_LR1e-3_dydet32
+
+  DATA:
+    FS: 25
+    DATASET: NIVS
+    DO_PREPROCESS: True            # if first time, should be true
+    DATA_FORMAT: NCDHW
+    DATA_PATH: "C://NIVS Project/NIVS Data/data_live/train"                   # Raw dataset path, need to be updated
+    CACHED_PATH: "C://NIVS Project/NIVS Data/Preprocessed/Train"    # Processed dataset save path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS :
+      DATA_TYPE: ['Raw']         #if use physnet, should be DiffNormalized
+      LABEL_TYPE: Raw
+      DO_CHUNK: True
+      CHUNK_LENGTH: 128                 #only support for factor of 512
+      DYNAMIC_DETECTION: True
+      DYNAMIC_DETECTION_FREQUENCY : 32
+      CROP_FACE: True
+      LARGE_FACE_BOX: False
+      LARGE_BOX_COEF: 1.5
+      H: 128
+      W: 128
+VALID:
+  DATA:
+    FS: 25
+    DATASET: NIVS
+    DO_PREPROCESS: True                # if first time, should be true
+    DATA_FORMAT: NCDHW
+    DATA_PATH: "C://NIVS Project/NIVS Data/data_live/valid"                   # Raw dataset path, need to be updated
+    CACHED_PATH: "C://NIVS Project/NIVS Data/Preprocessed/Valid"    # Processed dataset save path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS :
+      DATA_TYPE: ['Raw']         #if use physnet, should be DiffNormalized
+      LABEL_TYPE: Raw
+      DO_CHUNK: True
+      CHUNK_LENGTH: 128                 #only support for factor of 512
+      DYNAMIC_DETECTION: True
+      DYNAMIC_DETECTION_FREQUENCY : 32
+      CROP_FACE: True
+      LARGE_FACE_BOX: False
+      LARGE_BOX_COEF: 1.5
+      H: 128
+      W: 128
+
+TEST:
+  METRICS: ['MAE','RMSE','MAPE','Pearson']
+  USE_LAST_EPOCH: False                   # to use provided validation dataset to find the best epoch, should be false
+  DATA:
+    FS: 25
+    DATASET: NIVS
+    DO_PREPROCESS: True                  # if first time, should be true
+    DATA_FORMAT: NCDHW
+    DATA_PATH: "C://NIVS Project/NIVS Data/data_live/test"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "C://NIVS Project/NIVS Data/Preprocessed/Test"    # Processed dataset save path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS :
+      DATA_TYPE: ['Raw']         #if use physnet, should be DiffNormalized
+      LABEL_TYPE: Raw
+      DO_CHUNK: True
+      CHUNK_LENGTH: 128                 #only support for factor of 512
+      DYNAMIC_DETECTION: True
+      DYNAMIC_DETECTION_FREQUENCY : 32
+      CROP_FACE: True
+      LARGE_FACE_BOX: False
+      LARGE_BOX_COEF: 1.5
+      H: 128
+      W: 128
+DEVICE: cuda:0
+NUM_OF_GPU_TRAIN: 1
+LOG:
+  PATH: runs/exp
+MODEL:
+  DROP_RATE: 0.2
+  NAME: Physnet
+  PHYSNET:
+    FRAME_NUM: 128
+INFERENCE:
+  BATCH_SIZE: 2
+  EVALUATION_METHOD: "peak detection"        # "FFT" or "peak detection"
+  MODEL_PATH: "C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/PreTrainedModels/NIVS_SizeW128_SizeH128_ClipLength128_DataTypeDiffNormalized_LabelTypeDiffNormalized_Large_boxFalse_Large_size1.5_Dyamic_DetTrue_det_len32/NIVST_PhysNet_NoLBox_Exp1_1_diffnorm_diffnorm_128x128_0_LR1e-3_dydet32_Epoch13.pth"
+  #"C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/final_model_release/nm_test/NIVST_NoLBox_Exp1_raw_stdlabel_128x128_0_LR1e-3_dydet32_Epoch10.pth"
+  #"C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/final_model_release/nm_test/NIVST_NoLBox_Exp1_std_stdlabel_128x128_0_LR1e-3_dydet32_Epoch16.pth"
+  #"C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/final_model_release/nm_test/NIVST_NoLBox_Exp1_raw_stdlabel_128x128_0_LR1e-3_dydet32_Epoch10.pth"
+  #"C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/final_model_release/nm_test/NIVST_NoLBox_Exp1_diffnorm_128x128_0_LR1e-3_dydet64_Epoch24.pth"
+  #"C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/final_model_release/nm_test/NIVST_Exp1_physnet_diffnorm_128x128_0_Epoch15.pth"
+  #C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/final_model_release/nm_test/NIVST_Exp1_physnet_diffnorm_128x128_0_Epoch15.pth
+  #"C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/final_model_release/nm_test/NIVST_Exp1_physnet_Raw_128x128_0_Epoch29.pth"
+  #C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/final_model_release/nm_test/NIVST_005_008_010_physnet_diffnorm_128x128_0_Epoch29.pth
+  #"C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/final_model_release/nm_test/NIVST008_physnet_diffnorm_128x128_0_Epoch21.pth"
+  #"C:/NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/PreTrainedModels/NIVS_SizeW128_SizeH128_ClipLength128_DataTypeDiffNormalized_LabelTypeDiffNormalized_Large_boxTrue_Large_size1.5_Dyamic_DetTrue_det_len128/NIVST008_physnet_diffnorm_128x128_0_Epoch21.pth"

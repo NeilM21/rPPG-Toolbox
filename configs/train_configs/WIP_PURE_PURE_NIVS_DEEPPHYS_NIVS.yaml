@@ -1,0 +1,93 @@
+BASE: ['']
+TOOLBOX_MODE: "only_test"      # "train_and_test"  or "only_test"
+TRAIN:
+  BATCH_SIZE: 2
+  EPOCHS: 10
+  LR: 1e-3
+  MODEL_FILE_NAME: PURE_PURE_UBFC_deepphys_96x96_w2
+  DATA:
+    FS: 30
+    DATASET: PURE
+    DO_PREPROCESS: False                 # if first time, should be true
+    DATA_FORMAT: NDCHW
+    DATA_PATH: "C://NIVS Project/PURE Dataset/Raw"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "C://NIVS Project/PURE Dataset/Preprocessed"    # Processed dataset save path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 0.8
+    PREPROCESS :
+      DATA_TYPE: ['Normalized','Standardized']
+      LABEL_TYPE: Normalized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 180
+      DYNAMIC_DETECTION: False
+      DYNAMIC_DETECTION_FREQUENCY : 180
+      CROP_FACE: True
+      LARGE_FACE_BOX: True
+      LARGE_BOX_COEF: 1.5
+      H: 96
+      W: 96
+VALID:
+  KFOLD: # K-Fold does not affect preprocessing or storing files on disk. Splits are applied at data_loader stage
+    USE_KFOLD: True # For "train_and_test" mode to enable K-Fold validation and train k=NUM_FOLDS models
+    NUM_FOLDS: 5 # Number of folds for K-Fold validation
+    EVAL_KFOLD: True # For "only_test" mode to perform evaluation on test dataset using all k-fold models in .pkl file (INFERENCE.MODEL_PATH)
+  DATA:
+    FS: 30
+    DATASET: PURE
+    DO_PREPROCESS: False                    # if first time, should be true
+    DATA_FORMAT: NDCHW
+    DATA_PATH: "C://NIVS Project/PURE Dataset/Raw"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "C://NIVS Project/PURE Dataset/Preprocessed"    # Processed dataset save path, need to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.8
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: [ 'Normalized','Standardized' ]
+      LABEL_TYPE: Normalized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 180
+      DYNAMIC_DETECTION: False
+      DYNAMIC_DETECTION_FREQUENCY : 180
+      CROP_FACE: True
+      LARGE_FACE_BOX: True
+      LARGE_BOX_COEF: 1.5
+      H: 96
+      W: 96
+TEST:
+  METRICS: ['MAE','RMSE','MAPE','Pearson']
+  DATA:
+    FS: 25
+    DATASET: NIVS
+    DO_PREPROCESS: True                  # if first time, should be true
+    DATA_FORMAT: NDCHW
+    DATA_PATH: "C://NIVS Project/NIVS Data/data"                     # Raw dataset path, need to be updated
+    CACHED_PATH: "C://NIVS Project/NIVS Data/Preprocessed"    # Processed dataset save path, need to be updated
+    FILE_LIST_PATH: "C://NIVS Project/NIVS Data/DataFileLists/"    # Path to store file lists, needs to be updated
+    EXP_DATA_NAME: ""
+    BEGIN: 0.0
+    END: 1.0
+    PREPROCESS:
+      DATA_TYPE: ['Normalized','Standardized']
+      LABEL_TYPE: Normalized
+      DO_CHUNK: True
+      CHUNK_LENGTH: 180
+      DYNAMIC_DETECTION: False
+      DYNAMIC_DETECTION_FREQUENCY : 180
+      CROP_FACE: True
+      LARGE_FACE_BOX: True
+      LARGE_BOX_COEF: 1.5
+      H: 96
+      W: 96
+DEVICE: cuda:0
+NUM_OF_GPU_TRAIN: 1
+LOG:
+  PATH: runs/exp
+MODEL:
+  DROP_RATE: 0.2
+  NAME: DeepPhys
+INFERENCE:
+  BATCH_SIZE: 2
+  EVALUATION_METHOD: peak detection        # "FFT" or "peak detection"
+  MODEL_PATH:   "PreTrainedModels/PURE_SizeW96_SizeH96_ClipLength180_DataTypeNormalized_Standardized_LabelTypeNormalized_Large_boxTrue_Large_size1.5_Dyamic_DetFalse_det_len180/PURE_ALL_deepphys_96x96.pkl"
+                  
