@@ -42,15 +42,15 @@ class NIVSLoader(BaseLoader):
         """
         super().__init__(name, data_path, config_data)
 
-    def get_data(self, data_path):
+    def get_raw_data(self, data_path):
         data_dirs = glob.glob(data_path + os.sep + "Subject*")
         if not data_dirs:
             raise ValueError(self.name + "subject data not found!")
-        dirs = [{"index": re.search("Subject (\d+)", data_dir).group(0),
+        dirs = [{"index": re.search("Subject (\d+[a-z]*)", data_dir).group(0),
                  "path": data_dir} for data_dir in data_dirs]
         return dirs
 
-    def get_data_subset(self, data_dirs, begin, end):
+    def split_raw_data(self, data_dirs, begin, end):
         """Returns a subset of data dirs, split with begin and end values"""
         if begin == 0 and end == 1: # return the full directory if begin == 0 and end == 1
             return data_dirs
@@ -64,93 +64,93 @@ class NIVSLoader(BaseLoader):
 
         return data_dirs_new
 
-    def multi_process_manager(self, data_dirs,  config_preprocess, subj_idx=0):
+    def multi_process_manager(self, data_dirs,  config_preprocess, multi_process_quota=3):
         """ NIVS Dataset Override - In this case the multiprocess manager will be run for each video, and rather
         than processing separate one-minute clips, will store clips of a defined frame cap from a large video"""
 
-        print(f"====================== DATA-LOADING ======================\n")
-        saved_filename = data_dirs[subj_idx]['index']
-        subject_number = saved_filename.split()[-1]
-
-        subject_video_name = f"S{subject_number}_R2L_Trimmed.mts"
-        subject_bvp_name = f"S{subject_number}_R2L_groundtruth.csv"
-
-        subject_video_path = os.path.join(data_dirs[subj_idx]['path'], subject_video_name)
-        subject_bvp_path = os.path.join(data_dirs[subj_idx]['path'], subject_bvp_name)
-
-        # Get number of frames since NIVS videos can't be loaded into RAM whole
-        print(f"[DATA-LOADING] Processing Video {subject_video_name}...")
-        num_frames = self.get_video_metadata(subject_video_path)
-        nivs_gt_df = pd.read_csv(subject_bvp_path)
-
-        # Exactly divisible by 128
-        frame_load_cap = 1280
-        frames_left_over = num_frames % frame_load_cap
-
-        if frames_left_over != 0:
-            num_clip_subsets = int(num_frames / frame_load_cap) + 1
-        else:
-            num_clip_subsets = int(num_frames / frame_load_cap)
-
-        pbar = tqdm(range(num_clip_subsets), ascii=True)
-
+        print(f"====================== NIVS DATA-LOADING ======================\n")
+        clip_counter = 0
+        previous_video_clip_total = 0
         # shared data resource
         manager = Manager()
         file_list_dict = manager.dict()
-        p_list = []
-        running_num = 0
-        clip_counter = 0
 
-        for i in range(num_clip_subsets):
-            process_flag = True
-            while process_flag:  # ensure that every i creates a process
-                if running_num < 3:  # in case of too many processes
-                    clip_start_frame_idx = frame_load_cap * i
-                    clip_end_frame_idx = (frame_load_cap * (i + 1)) - 1
-                    if i == num_clip_subsets - 1:
-                        clip_end_frame_idx = int(clip_start_frame_idx + frames_left_over - 1)
-                    p = Process(target=self.preprocess_dataset_subprocess,
-                                args=(config_preprocess, i, nivs_gt_df, subject_video_path, clip_start_frame_idx,
-                                      clip_end_frame_idx, file_list_dict, saved_filename))
-                    p.start()
-                    p_list.append(p)
-                    clip_counter += 1
-                    running_num += 1
-                    process_flag = False
-                for p_ in p_list:
-                    if not p_.is_alive():
-                        p_list.remove(p_)
-                        p_.join()
-                        running_num -= 1
-                        pbar.update(1)
-        # join all processes
-        for p_ in p_list:
-            p_.join()
-            pbar.update(1)
-        pbar.close()
+        for subj_idx in range(len(data_dirs)):
+            previous_video_clip_total += clip_counter
+            saved_filename = data_dirs[subj_idx]['index']
+            subject_number = saved_filename.split()[-1]
+
+            subject_video_name = f"S{subject_number}_R2L_Trimmed.mts"
+            subject_bvp_name = f"S{subject_number}_R2L_groundtruth.csv"
+
+            subject_video_path = os.path.join(data_dirs[subj_idx]['path'], subject_video_name)
+            subject_bvp_path = os.path.join(data_dirs[subj_idx]['path'], subject_bvp_name)
+
+            # Get number of frames since NIVS videos can't be loaded into RAM whole
+            print(f"[DATA-LOADING] Processing Video {subject_video_name}...")
+            num_frames = self.get_video_metadata(subject_video_path)
+            nivs_gt_df = pd.read_csv(subject_bvp_path)
+
+            # Exactly divisible by 128
+            frame_load_cap = 1280
+            frames_left_over = num_frames % frame_load_cap
+
+            if frames_left_over != 0:
+                num_clip_subsets = int(num_frames / frame_load_cap) + 1
+            else:
+                num_clip_subsets = int(num_frames / frame_load_cap)
+
+            pbar = tqdm(range(num_clip_subsets), ascii=True)
+
+
+            p_list = []
+            running_num = 0
+
+            for i in range(num_clip_subsets):
+                process_flag = True
+                while process_flag:  # ensure that every i creates a process
+                    if running_num < multi_process_quota:  # in case of too many processes
+                        clip_start_frame_idx = frame_load_cap * i
+                        clip_end_frame_idx = (frame_load_cap * (i + 1)) - 1
+                        if i == num_clip_subsets - 1:
+                            clip_end_frame_idx = int(clip_start_frame_idx + frames_left_over - 1)
+                        p = Process(target=self.preprocess_dataset_subprocess,
+                                    args=(config_preprocess, i, i + previous_video_clip_total, nivs_gt_df, subject_video_path, clip_start_frame_idx,
+                                          clip_end_frame_idx, file_list_dict, saved_filename))
+                        p.start()
+                        p_list.append(p)
+                        clip_counter += 1
+                        running_num += 1
+                        process_flag = False
+                    for p_ in p_list:
+                        if not p_.is_alive():
+                            p_list.remove(p_)
+                            p_.join()
+                            running_num -= 1
+                            pbar.update(1)
+            # join all processes
+            for p_ in p_list:
+                p_.join()
+                pbar.update(1)
+            pbar.close()
 
         return file_list_dict
 
-    def preprocess_dataset_subprocess(self, config_preprocess, i, nivs_gt_df, subject_video_path,
+    def preprocess_dataset_subprocess(self, config_preprocess, i, clips_processed_counter, nivs_gt_df, subject_video_path,
                                       clip_start_frame_idx, clip_end_frame_idx, file_list_dict, saved_filename):
-
-        running_clip_count = 0
-
-        frames = self.read_video(video_file=subject_video_path, start_idx=clip_start_frame_idx, end_idx=clip_end_frame_idx)
-        bvps = self.read_wave(nivs_gt_df=nivs_gt_df, start_idx=clip_start_frame_idx, end_idx=clip_end_frame_idx)
-
-        frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess, config_preprocess.LARGE_FACE_BOX)
-        sub_clip_saved_filename = f"{saved_filename}clip{i}"
-        count, input_name_list, label_name_list = self.save_multi_process(frames_clips, bvps_clips,
-                                                                          sub_clip_saved_filename)
-        running_clip_count += len(bvps_clips)
-        file_list_dict[i] = input_name_list
         frames = list()
         bvps = list()
         frames_clips = list()
         bvps_clips = list()
+        running_clip_count = 0
 
-
+        frames = self.read_video(video_file=subject_video_path, start_idx=clip_start_frame_idx, end_idx=clip_end_frame_idx)
+        bvps = self.read_wave(nivs_gt_df=nivs_gt_df, start_idx=clip_start_frame_idx, end_idx=clip_end_frame_idx)
+        sub_clip_saved_filename = f"{saved_filename}clip{i}"
+        frames_clips, bvps_clips = self.preprocess(frames, bvps, config_preprocess, sub_clip_saved_filename)
+        input_name_list, label_name_list = self.save_multi_process(frames_clips, bvps_clips, sub_clip_saved_filename)
+        running_clip_count += len(bvps_clips)
+        file_list_dict[clips_processed_counter] = input_name_list
 
     @staticmethod
     def get_video_metadata(video_file):

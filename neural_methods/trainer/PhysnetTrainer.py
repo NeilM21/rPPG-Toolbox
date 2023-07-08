@@ -15,6 +15,7 @@ from tqdm import tqdm
 import wandb
 import matplotlib.pyplot as plt
 
+
 class PhysnetTrainer(BaseTrainer):
 
     def __init__(self, config, data_loader):
@@ -58,7 +59,7 @@ class PhysnetTrainer(BaseTrainer):
             running_loss = 0.0
             train_loss = []
             self.model.train()
-            tbar = tqdm(data_loader["train"], ncols=80, mode="ascii")
+            tbar = tqdm(data_loader["train"], ncols=80, ascii=True)
             for idx, batch in enumerate(tbar):
                 tbar.set_description("Train epoch %s" % epoch)
                 rPPG, x_visual, x_visual3232, x_visual1616 = self.model(
@@ -76,7 +77,7 @@ class PhysnetTrainer(BaseTrainer):
                         f'[{epoch}, {idx + 1:5d}] loss: {running_loss / 100:.3f}')
                     running_loss = 0.0
                 train_loss.append(loss.item())
-                wandb.log({"loss": loss.item()})
+                wandb.log({"loss (Neg. Pearson)": loss.item()})
 
                 self.optimizer.step()
                 self.scheduler.step()
@@ -86,7 +87,7 @@ class PhysnetTrainer(BaseTrainer):
             if not self.config.TEST.USE_LAST_EPOCH: 
                 valid_loss = self.valid(data_loader)
                 print('validation loss: ', valid_loss)
-                wandb.log({"val loss": valid_loss.item()})
+                wandb.log({"val loss (Neg. Pearson)": valid_loss.item()})
 
                 if self.min_valid_loss is None:
                     self.min_valid_loss = valid_loss
@@ -139,23 +140,29 @@ class PhysnetTrainer(BaseTrainer):
         labels = dict()
 
         if self.config.TOOLBOX_MODE == "only_test":
+            inference_path = convert_path_windows_limit(self.config.INFERENCE.MODEL_PATH)
             if not os.path.exists(self.config.INFERENCE.MODEL_PATH):
                 raise ValueError("Inference model path error! Please check INFERENCE.MODEL_PATH in your yaml.")
             self.model.load_state_dict(torch.load(self.config.INFERENCE.MODEL_PATH))
             print("Testing uses pretrained model!")
+            best_model_name = self.config.INFERENCE.MODEL_PATH.split("/")[-1]
             print(self.config.INFERENCE.MODEL_PATH)
         else:
             if self.config.TEST.USE_LAST_EPOCH:
-                last_epoch_model_path = os.path.join(
+                last_epoch_model_path = os.path.join("C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox",
                 self.model_dir, self.model_file_name + '_Epoch' + str(self.max_epoch_num - 1) + '.pth')
                 print("Testing uses last epoch as non-pretrained model!")
                 print(last_epoch_model_path)
+                best_model_name = last_epoch_model_path.split(os.sep)[-1]
+                #last_epoch_model_path = convert_path_windows_limit(last_epoch_model_path)
                 self.model.load_state_dict(torch.load(last_epoch_model_path))
             else:
-                best_model_path = os.path.join(
+                best_model_path = os.path.join("C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox",
                     self.model_dir, self.model_file_name + '_Epoch' + str(self.best_epoch) + '.pth')
                 print("Testing uses best epoch selected using model selection as non-pretrained model!")
                 print(best_model_path)
+                best_model_name = best_model_path.split(os.sep)[-1]
+                #best_model_path = convert_path_windows_limit(best_model_path)
                 self.model.load_state_dict(torch.load(best_model_path))
 
         self.model = self.model.to(self.config.DEVICE)
@@ -168,7 +175,7 @@ class PhysnetTrainer(BaseTrainer):
                     self.config.DEVICE), test_batch[1].to(self.config.DEVICE)
 
                 # Generate Feature Maps
-                self.generate_visualizations(im_data=data, batch_cnt=batch_cnt)
+                #self.generate_visualizations(im_data=data, batch_cnt=batch_cnt)
 
                 pred_ppg_test, _, _, _ = self.model(data)
                 for idx in range(batch_size):
@@ -181,7 +188,7 @@ class PhysnetTrainer(BaseTrainer):
                     labels[subj_index][sort_index] = label[idx]
 
         print('')
-        calculate_metrics(predictions, labels, self.config)
+        calculate_metrics(predictions, labels, self.config, best_model_name)
 
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
@@ -190,10 +197,7 @@ class PhysnetTrainer(BaseTrainer):
             self.model_dir, self.model_file_name + '_Epoch' + str(index) + '.pth')
 
         model_path = os.path.abspath(model_path)
-        if model_path.startswith(u"\\\\"):
-            model_path = u"\\\\?\\UNC\\" + model_path[2:]
-        else:
-            model_path = u"\\\\?\\" + model_path
+        model_path = convert_path_windows_limit(model_path)
 
         torch.save(self.model.state_dict(), model_path)
         print('Saved Model Path: ', model_path)
@@ -257,3 +261,11 @@ class PhysnetTrainer(BaseTrainer):
         plt.savefig(f"C:/NIVS Project/UBFC Experiments/FeatureViz/feature_maps_batch_{batch_cnt}.jpg",
                     bbox_inches='tight')
         plt.close()
+
+
+def convert_path_windows_limit(base_path):
+    if base_path.startswith(u"\\\\"):
+        return u"\\\\?\\UNC\\" + base_path[2:]
+    else:
+        return u"\\\\?\\" + base_path
+

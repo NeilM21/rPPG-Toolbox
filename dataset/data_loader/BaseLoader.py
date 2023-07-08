@@ -13,6 +13,7 @@ from math import ceil
 from multiprocessing import Pool, Process, Value, Array, Manager
 
 import cv2
+import time
 import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
@@ -50,6 +51,8 @@ class BaseLoader(Dataset):
         self.cached_path = config_data.CACHED_PATH
         self.file_list_path = config_data.FILE_LIST_PATH
         self.preprocessed_data_len = 0
+        self.face_detect_counter = 0
+        self.dataset_source = config_data.DATASET
         self.data_format = config_data.DATA_FORMAT
         self.do_preprocess = config_data.DO_PREPROCESS
         self.raw_data_dirs = self.get_raw_data(self.raw_data_path)
@@ -142,7 +145,7 @@ class BaseLoader(Dataset):
         self.load_preprocessed_data()  # load all data and corresponding labels (sorted for consistency)
         print("Total Number of raw files preprocessed:", len(data_dirs_split), end='\n\n')
 
-    def preprocess(self, frames, bvps, config_preprocess):
+    def preprocess(self, frames, bvps, config_preprocess, crop_save_filename=None):
         """Preprocesses a pair of data.
 
         Args:
@@ -162,7 +165,8 @@ class BaseLoader(Dataset):
             config_preprocess.H,
             config_preprocess.LARGE_FACE_BOX,
             config_preprocess.CROP_FACE,
-            config_preprocess.LARGE_BOX_COEF)
+            config_preprocess.LARGE_BOX_COEF,
+            crop_save_filename)
         # Check data transformation type
         data = list()  # Video data
         for data_type in config_preprocess.DATA_TYPE:
@@ -194,7 +198,7 @@ class BaseLoader(Dataset):
 
         return frames_clips, bvps_clips
 
-    def face_detection(self, frame, use_larger_box=False, larger_box_coef=1.0):
+    def face_detection(self, frame, use_larger_box=False, larger_box_coef=1.0, crop_save_filename_and_dydet=None):
         """Face detection on a single frame.
 
         Args:
@@ -205,9 +209,28 @@ class BaseLoader(Dataset):
             face_box_coor(List[int]): coordinates of face bouding box.
         """
 
-        detector = cv2.CascadeClassifier(
-            './dataset/haarcascade_frontalface_default.xml')
-        face_zone = detector.detectMultiScale(frame)
+
+        # Original - Viola Jones
+        #detector = cv2.CascadeClassifier('./dataset/haarcascade_frontalface_default.xml')
+        #face_zone = detector.detectMultiScale(frame)
+
+        # CaffeNet Testing
+        #face_zone = self.face_detection_caffe(frame, False, 1.0, crop_save_filename_and_dydet)
+        #if face_zone:
+        #    face_zone = np.array([[int(z) for coor in face_zone for z in coor]])
+
+        # YuNet Testing
+        detector2 = cv2.FaceDetectorYN.create("./dataset/face_detection_yunet_2022mar.onnx", "", (0, 0), top_k=1,
+                                             score_threshold=0.5)
+
+        detector2.setInputSize([frame.shape[1], frame.shape[0]])
+        _, face_zone = detector2.detect(frame)
+
+        if face_zone is not None:
+            face_zone = np.array([list(map(int, face_zone[0, :4]))])
+        else:
+           face_zone = list()
+
         if len(face_zone) < 1:
             print("ERROR: No Face Detected")
             face_box_coor = [0, 0, frame.shape[0], frame.shape[1]]
@@ -222,10 +245,42 @@ class BaseLoader(Dataset):
             face_box_coor[1] = max(0, face_box_coor[1] - (larger_box_coef - 1.0) / 2 * face_box_coor[3])
             face_box_coor[2] = larger_box_coef * face_box_coor[2]
             face_box_coor[3] = larger_box_coef * face_box_coor[3]
+
+        if len(face_zone) >= 1:
+            # print()
+            # face_crop = frame[face_box_coor[1]:face_box_coor[1]+face_box_coor[3], face_box_coor[0]:face_box_coor[0]+face_box_coor[2]]
+            face_crop = frame[max(face_box_coor[1], 0): min(face_box_coor[1] + face_box_coor[3], frame.shape[0]),
+            max(face_box_coor[0], 0): min(face_box_coor[0] + face_box_coor[2], frame.shape[1])]
+            face_crop = cv2.resize(face_crop, (128, 128), interpolation=cv2.INTER_AREA)
+            face_crop = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
+            cv2.imwrite(f'C:/NIVS Project/NIVS Data/EvalCompare/FaceCropping/{self.dataset_source}_{crop_save_filename_and_dydet}_crop.png', face_crop)
         return face_box_coor
 
+    def face_detection_caffe(self, frame, use_larger_box=False, larger_box_coef=1.0, crop_save_filename_and_dydet=None):
+        cvNet = cv2.dnn.readNetFromCaffe('C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/dataset/architecture.txt',
+                                         'C://NIVS Project/GitHub Repos/rPPG-Toolbox-April-2023/rPPG-Toolbox/dataset/weights.caffemodel')
+
+        (h, w) = frame.shape[:2]
+        blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
+        cvNet.setInput(blob)
+        detections = cvNet.forward()
+        for i in range(0, detections.shape[2]):
+            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+            (startX, startY, endX, endY) = box.astype("int")
+            frame_cropped = frame[startY:endY, startX:endX]
+            confidence = detections[0, 0, i, 2]
+            if confidence > 0.5:
+                #frame_rgb = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), (128, 128))
+                #face_crop = cv2.cvtColor(frame_cropped, cv2.COLOR_BGR2RGB)
+                #cv2.imwrite(f'C://NIVS Project/NIVS Data/EvalCompare/FaceCropping/{self.dataset_source}_{crop_save_filename_and_dydet}_caffecrop.png', face_crop)
+                # Substraction in return statement to line up with the crop operations in the toolbox which sum the adjacent dimensions
+                return [[startX, startY, endX-startX, endY-startY]]
+            else:
+                print("CAFFENet: No face region found...")
+                return []
+
     def face_crop_resize(self, frames, use_dynamic_detection, detection_freq, width, height,
-                         use_larger_box, use_face_detection, larger_box_coef):
+                         use_larger_box, use_face_detection, larger_box_coef, crop_save_filename=None):
         """Crop face and resize frames.
 
         Args:
@@ -252,7 +307,15 @@ class BaseLoader(Dataset):
         # Perform face detection by num_dynamic_det" times.
         for idx in range(num_dynamic_det):
             if use_face_detection:
-                face_region_all.append(self.face_detection(frames[detection_freq * idx], use_larger_box, larger_box_coef))
+                reference_frame = frames[detection_freq * idx]
+                reference_frame_cv2_RGB = cv2.cvtColor(reference_frame, cv2.COLOR_BGR2RGB)
+                #cv2.imshow("Reference Frame", reference_frame_cv2_RGB)
+                #cv2.waitKey(2000)
+                cv2.imwrite(f'C:/NIVS Project/NIVS Data/EvalCompare/FaceCropping/{self.dataset_source}_{crop_save_filename}_{idx}_ref.png',
+                            reference_frame_cv2_RGB)
+                face_region_all.append(self.face_detection(frames[detection_freq * idx], use_larger_box, larger_box_coef,
+                                                           f"{crop_save_filename}_{idx}"))
+
             else:
                 face_region_all.append([0, 0, frames.shape[1], frames.shape[2]])
         face_region_all = np.asarray(face_region_all, dtype='int')
@@ -270,6 +333,8 @@ class BaseLoader(Dataset):
                 frame = frame[max(face_region[1], 0):min(face_region[1] + face_region[3], frame.shape[0]),
                         max(face_region[0], 0):min(face_region[0] + face_region[2], frame.shape[1])]
             resized_frames[i] = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
+            #face_crop = cv2.cvtColor(resized_frames[i], cv2.COLOR_BGR2RGB)
+            #cv2.imwrite(f'C:/NIVS Project/NIVS Data/EvalCompare/FaceCropping/{self.dataset_source}_{crop_save_filename_and_dydet}_crop.png', face_crop)
         return resized_frames
 
     def chunk(self, frames, bvps, chunk_length):
@@ -341,7 +406,7 @@ class BaseLoader(Dataset):
             count += 1
         return input_path_name_list, label_path_name_list
 
-    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=1):
+    def multi_process_manager(self, data_dirs, config_preprocess, multi_process_quota=8):
         """Allocate dataset preprocessing across multiple processes.
 
         Args:
@@ -477,6 +542,17 @@ class BaseLoader(Dataset):
         diffnormalized_data = diffnormalized_data / np.std(diffnormalized_data)
         diffnormalized_data = np.append(diffnormalized_data, diffnormalized_data_padding, axis=0)
         diffnormalized_data[np.isnan(diffnormalized_data)] = 0
+
+        # Before and After Diff-Norm
+        #frame_0_raw = data[0]
+        #cv2.imshow("Raw Frame", frame_0_raw)
+        #cv2.waitKey(0)
+
+        #frame_0_diff = diffnormalized_data[0]
+        #cv2.imshow("Raw Frame", frame_0_diff)
+        #cv2.waitKey(0)
+
+
         return diffnormalized_data
 
     @staticmethod

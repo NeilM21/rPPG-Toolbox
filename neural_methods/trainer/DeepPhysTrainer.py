@@ -79,7 +79,7 @@ class DeepPhysTrainer(BaseTrainer):
                         f'[{epoch}, {idx + 1:5d}] loss: {running_loss / 100:.3f}')
                     running_loss = 0.0
                 train_loss.append(loss.item())
-                wandb.log({"loss": loss.item()})
+                wandb.log({"loss (MSE)": loss.item()})
                 tbar.set_postfix({"loss": loss.item(), "lr": self.optimizer.param_groups[0]["lr"]})
 
 
@@ -87,7 +87,7 @@ class DeepPhysTrainer(BaseTrainer):
             if not self.config.TEST.USE_LAST_EPOCH: 
                 valid_loss = self.valid(data_loader)
                 print('validation loss: ', valid_loss)
-                wandb.log({"val loss": valid_loss.item()})
+                wandb.log({"val loss (MSE)": valid_loss.item()})
                 if self.min_valid_loss is None:
                     self.min_valid_loss = valid_loss
                     self.best_epoch = epoch
@@ -176,11 +176,20 @@ class DeepPhysTrainer(BaseTrainer):
                     labels[subj_index][sort_index] = labels_test[idx * self.chunk_len:(idx + 1) * self.chunk_len]
         
         print('')
-        calculate_metrics(predictions, labels, self.config)
+        best_model_name = best_model_path.split("/")[-1]
+        calculate_metrics(predictions, labels, self.config, best_model_name)
 
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
             os.makedirs(self.model_dir)
         model_path = os.path.join(
             self.model_dir, self.model_file_name + '_Epoch' + str(index) + '.pth')
+        model_path = os.path.abspath(model_path)
+        model_path = convert_path_windows_limit(model_path)
         torch.save(self.model.state_dict(), model_path)
+
+def convert_path_windows_limit(base_path):
+    if base_path.startswith(u"\\\\"):
+        return u"\\\\?\\UNC\\" + base_path[2:]
+    else:
+        return u"\\\\?\\" + base_path

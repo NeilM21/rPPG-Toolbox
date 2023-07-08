@@ -39,10 +39,22 @@ def seed_worker(worker_id):
 
 def add_args(parser):
     """Adds arguments for parser."""
+
+    # NIVS - All Train
     #parser.add_argument('--config_file', required=False,
-    #                    default="configs/train_configs/PURE_PURE_UBFC_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
+    #                    default="configs/train_configs/NIVS_ALL_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
+
+    #parser.add_argument('--config_file', required=False,
+    #                    default="configs/train_configs/NIVS_ALL_DEEPPHYS_BASIC.yaml", type=str, help="The name of the model.")
+
+    # Pure - NIVS INF
+    #parser.add_argument('--config_file', required=False,
+    #                  default="configs/train_configs/PURE_PURE_NIVS_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
+
+    # Pure - UBFC INF
     parser.add_argument('--config_file', required=False,
-                        default="configs/infer_configs/PURE_UBFC_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
+                      default="configs/train_configs/PURE_PURE_UBFC_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
+
     '''Neural Method Sample YAMSL LIST:
       SCAMPS_SCAMPS_UBFC_TSCAN_BASIC.yaml
       SCAMPS_SCAMPS_UBFC_DEEPPHYS_BASIC.yaml
@@ -77,7 +89,7 @@ def train_and_test(config, data_loader_dict):
         model_trainer = trainer.DeepPhysTrainer.DeepPhysTrainer(config, data_loader_dict)
     else:
         raise ValueError('Your Model is Not Supported  Yet!')
-    wandb.init(project="rPPGToolbox-NIVSDiagnostic", entity="nivs-uom",
+    wandb.init(project="rPPGToolbox-NIVSDiagnostic-PhysNet", entity="nivs-uom",
                name=f"{config.TRAIN.MODEL_FILE_NAME}")
     model_trainer.train(data_loader_dict)
     model_trainer.test(data_loader_dict)
@@ -147,6 +159,8 @@ if __name__ == "__main__":
             train_loader = data_loader.SCAMPSLoader.SCAMPSLoader
         elif config.TRAIN.DATA.DATASET == "MMPD":
             train_loader = data_loader.MMPDLoader.MMPDLoader
+        elif config.TRAIN.DATA.DATASET == "NIVS":
+            train_loader = data_loader.NIVSLoader.NIVSLoader
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
 
@@ -162,6 +176,8 @@ if __name__ == "__main__":
             valid_loader = data_loader.SCAMPSLoader.SCAMPSLoader
         elif config.VALID.DATA.DATASET == "MMPD":
             valid_loader = data_loader.MMPDLoader.MMPDLoader
+        elif config.VALID.DATA.DATASET == "NIVS":
+            valid_loader = data_loader.NIVSLoader.NIVSLoader
         elif config.VALID.DATA.DATASET is None and not config.TEST.USE_LAST_EPOCH:
                 raise ValueError("Validation dataset not specified despite USE_LAST_EPOCH set to False!")
         else:
@@ -177,14 +193,26 @@ if __name__ == "__main__":
                 config_data=config.TRAIN.DATA)
             data_loader_dict['train'] = DataLoader(
                 dataset=train_data_loader,
-                num_workers=16,
+                num_workers=2,
                 batch_size=config.TRAIN.BATCH_SIZE,
-                shuffle=True,
+                shuffle=False,
                 worker_init_fn=seed_worker,
                 generator=train_generator
             )
         else:
             data_loader_dict['train'] = None
+
+        """for batch_cnt, sample_batch in enumerate(data_loader_dict['train']):
+            if batch_cnt == 0:
+                data, label = sample_batch[0].numpy(), sample_batch[1].numpy()
+                first_vals = label[0, :]
+                second_vals=label[1, :]
+
+            latest_data, latest_label = sample_batch[0].numpy(), sample_batch[1].numpy()
+            penult_vals = latest_label[0, :]
+            ult_vals = latest_label[1, :]
+        """
+        print()
 
         # Create and initialize the valid dataloader given the correct toolbox mode,
         # a supported dataset name, and a valid dataset path
@@ -217,6 +245,8 @@ if __name__ == "__main__":
             test_loader = data_loader.SCAMPSLoader.SCAMPSLoader
         elif config.TEST.DATA.DATASET == "MMPD":
             test_loader = data_loader.MMPDLoader.MMPDLoader
+        elif config.TEST.DATA.DATASET == "NIVS":
+            test_loader = data_loader.NIVSLoader.NIVSLoader
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
 

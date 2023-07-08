@@ -184,7 +184,8 @@ class TscanTrainer(BaseTrainer):
                     labels[subj_index][sort_index] = labels_test[idx * self.chunk_len:(idx + 1) * self.chunk_len]
 
         print('')
-        calculate_metrics(predictions, labels, self.config)
+        best_model_name = best_model_path.split("/")[-1]
+        calculate_metrics(predictions, labels, self.config, best_model_name)
 
     def save_model(self, index):
         if not os.path.exists(self.model_dir):
