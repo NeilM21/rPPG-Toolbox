@@ -3,6 +3,7 @@ import pandas as pd
 import torch, os
 from evaluation.post_process import *
 from matplotlib import pyplot as plt
+from scipy.signal import hilbert
 import datetime
 
 
@@ -52,6 +53,7 @@ def calculate_metrics(predictions, labels, config, best_model_name=""):
 
     eval_path = f"C://NIVS Project/NIVS Data/EvalCompare/Evaluation/{best_model_name}/{datetime_str}__{dataset_name}"
     eval_plots_save_path = f"{eval_path}/Plots"
+    hilbert_eval_plots_save_path = f"{eval_path}/Hilbert"
     eval_hrs_save_path = f"{eval_path}/Data"
 
     if not os.path.exists(eval_plots_save_path):
@@ -64,7 +66,8 @@ def calculate_metrics(predictions, labels, config, best_model_name=""):
         # [NEIL] Visualize PPG Signals
         visualize_ppg_pred_gt(gt_ppg=label, pred_ppg=prediction, dataset_name=config.TEST.DATA.DATASET,
                               subj_clip=index, data_mode=config.TEST.DATA.PREPROCESS.LABEL_TYPE,
-                              ppg_save_path=eval_plots_save_path)
+                              ppg_save_path=eval_plots_save_path, ppg_fs=config.TEST.DATA.FS, generate_hilbert=True,
+                              hilbert_path=hilbert_eval_plots_save_path)
 
         if config.TEST.DATA.PREPROCESS.LABEL_TYPE == "Standardized" or \
                 config.TEST.DATA.PREPROCESS.LABEL_TYPE == "Raw":
@@ -160,45 +163,113 @@ def calculate_metrics(predictions, labels, config, best_model_name=""):
             raise ValueError("Wrong Test Metric Type")
 
     clip_eval_df.to_csv(f"{eval_hrs_save_path}/clip_eval_{dataset_name}.csv", index=False, sep=' ')
-
+    
     clip_eval_df = clip_eval_df.style.apply(df_highlight_outliers, axis=None)
     clip_eval_df.to_excel(f"{eval_hrs_save_path}/clip_eval_{dataset_name}.xlsx", sheet_name='evaluation', index=False)
 
     hr_estimates_df.to_csv(f"{eval_hrs_save_path}/clip_hrs_{dataset_name}.csv", index=False, sep=' ')
 
 
-def visualize_ppg_pred_gt(gt_ppg, pred_ppg, dataset_name, subj_clip, data_mode, ppg_save_path):
+def visualize_ppg_pred_gt(gt_ppg, pred_ppg, dataset_name, subj_clip, data_mode, ppg_save_path, ppg_fs,
+                          generate_hilbert=False, hilbert_path=None):
+
     gt_ppg = gt_ppg.numpy()
     pred_ppg = pred_ppg.numpy()
 
     # New Viz
-    plt.subplot(2, 1, 1)
-    plt.plot(gt_ppg, label='gt', color="tab:orange")
-    plt.plot(pred_ppg, label='pred', color="tab:blue")
-    plt.legend(loc='best')
-    plt.title(f'{subj_clip} PPG Overlay - Ground Truth vs. Prediction')
+    fig_eval, axs_eval = plt.subplot_mosaic([["GT_Pred_PPG_Overlay", "GT_Pred_PPG_Overlay"],
+                                                   ["GT_PPG", "Pred_PPG"],
+                                                   ], layout='constrained')
+    fig_eval.set_size_inches(12, 9)
 
-    plt.subplot(2, 2, 3)
-    plt.plot(gt_ppg, label='gt', color="tab:orange")
-    plt.title('Ground Truth WaveForm')
+    axs_eval["GT_Pred_PPG_Overlay"].plot(gt_ppg, label='gt', color="tab:orange")
+    axs_eval["GT_Pred_PPG_Overlay"].plot(pred_ppg, label='pred', color="tab:blue")
+    axs_eval["GT_Pred_PPG_Overlay"].legend(loc='best')
+    axs_eval["GT_Pred_PPG_Overlay"].set_title(f'{subj_clip} PPG Overlay - Ground Truth vs. Prediction')
 
-    plt.subplot(2, 2, 4)
-    plt.plot(pred_ppg, label='pred', color="tab:blue")
-    plt.title('Prediction WaveForm')
-    fig = plt.gcf()
-    fig.set_size_inches(8, 6)
-    plt.tight_layout()
-    plt.savefig(f"{ppg_save_path}/{dataset_name}_{subj_clip}_{data_mode}.png", dpi=150)
-    plt.close()
+    axs_eval["GT_PPG"].plot(gt_ppg, label='gt', color="tab:orange")
+    axs_eval["GT_PPG"].set_title('Ground Truth WaveForm')
 
-    # Old Viz
-    #plt.plot(gt_ppg, label='gt')
-    #plt.plot(pred_ppg, label='pred')
-    #plt.title('Ground truth vs Prediction PPG signal')
-    #plt.legend(loc='best')
-    #plt.show()
-    #plt.savefig(f"C:/NIVS Project/NIVS Data/EvalCompare/{subj_clip}_{data_mode}.png")
-    #plt.close()
+    axs_eval["Pred_PPG"].plot(pred_ppg, label='pred', color="tab:blue")
+    axs_eval["Pred_PPG"].set_title('Prediction WaveForm')
+
+    # Time axis for segmented plots (samples - no time axis from rPPG-Toolbox evaluation pipeline)
+    seg_length = 20 * ppg_fs
+    plot_len = len(gt_ppg)
+
+    if plot_len % seg_length != 0:
+        video_segments = (plot_len // seg_length) + 1
+    else:
+        video_segments = plot_len // seg_length
+
+    # If max segments is larger than this value, restrict number of plots generated to this value
+    max_sample_plots = 10
+
+    num_plots = int(video_segments) if video_segments < max_sample_plots else max_sample_plots
+
+    for i in range(num_plots):
+        interval_start = np.round((i * seg_length), 3)
+        interval_end = np.round(((i+1) * seg_length), 3)
+        for _, ax in axs_eval.items():
+            ax.set_xlim(interval_start, interval_end)
+            ax.set_xlabel("Samples")
+            plt.savefig(f"{ppg_save_path}/{dataset_name}_{subj_clip}_{i}_{data_mode}.png", dpi=200)
+
+    plt.close(fig_eval)
+
+    # Hilbert Transform Visualization
+    if generate_hilbert:
+        gt_analytic_signal = hilbert(gt_ppg)
+        gt_amp = np.abs(gt_analytic_signal)
+        gt_phase = np.unwrap(np.angle(gt_analytic_signal))
+        gt_frequency = (np.diff(gt_phase) / (2.0 * np.pi) * ppg_fs)
+
+        pred_analytic_signal = hilbert(pred_ppg)
+        pred_amp = np.abs(pred_analytic_signal)
+        pred_phase = np.unwrap(np.angle(pred_analytic_signal))
+        pred_frequency = (np.diff(pred_phase) / (2.0 * np.pi) * ppg_fs)
+
+        fig_hilbert, axs_hilbert = plt.subplot_mosaic([["GT_Envelope_Overlay"],
+                                       ["Pred_Envelope_Overlay"],
+                                       ["GT_Instantaneous_Frequency"],
+                                       ["Pred_Instantaneous_Frequency"]
+                                       ], layout='constrained')
+        fig_hilbert.set_size_inches(12, 9)
+
+        axs_hilbert["GT_Envelope_Overlay"].plot(gt_ppg, label='signal')
+        axs_hilbert["GT_Envelope_Overlay"].plot(gt_amp, label='amp envelope', color='tab:red')
+        axs_hilbert["GT_Envelope_Overlay"].legend()
+        axs_hilbert["GT_Envelope_Overlay"].set_title(f"Ground Truth Signal with Amplitude Envelope Overlay")
+
+        axs_hilbert["Pred_Envelope_Overlay"].plot(pred_ppg, label='signal')
+        axs_hilbert["Pred_Envelope_Overlay"].plot(pred_amp, label='amp envelope', color='tab:red')
+        axs_hilbert["Pred_Envelope_Overlay"].legend()
+        axs_hilbert["Pred_Envelope_Overlay"].set_title(f"Prediction Signal with Amplitude Envelope Overlay")
+
+        axs_hilbert["GT_Instantaneous_Frequency"].plot(np.real(gt_frequency))
+        axs_hilbert["GT_Instantaneous_Frequency"].set_title(f"Ground Truth Instantaneous Frequency")
+
+        axs_hilbert["Pred_Instantaneous_Frequency"].plot(np.real(pred_frequency))
+        axs_hilbert["Pred_Instantaneous_Frequency"].set_title(f"Prediction Instantaneous Frequency")
+
+        # plt.show()
+
+        if not os.path.exists(hilbert_path):
+            os.makedirs(hilbert_path, exist_ok=True)
+
+        # Visualize and save Hilbert Plots
+        for i in range(num_plots):
+            interval_start = np.round((i * seg_length), 3)
+            interval_end = np.round(((i + 1) * seg_length), 3)
+            # Snip the main axis into ten 20-second segments for visual clarity of comparisons
+            for _, ax in axs_hilbert.items():
+                ax.set_xlim([interval_start, interval_end])
+                ax.set_xlabel("samples")
+            plt.suptitle(f"\nHilbert Transform for {dataset_name}-{subj_clip}: segment {i}\n",
+                         fontsize='xx-large', weight='extra bold')
+            plt.savefig(f"{hilbert_path}/{dataset_name}_{subj_clip}_{i}_{data_mode}.png", dpi=200)
+
+        plt.close(fig_hilbert)
 
 
 def df_highlight_outliers(df):
