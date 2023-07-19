@@ -49,7 +49,7 @@ def add_args(parser):
 
     # Pure - NIVS INF
     #parser.add_argument('--config_file', required=False,
-    #                  default="configs/train_configs/PURE_PURE_NIVS_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
+    #                    default="configs/train_configs/PURE_PURE_NIVS_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
 
     # Pure - UBFC INF
     parser.add_argument('--config_file', required=False,
@@ -89,8 +89,11 @@ def train_and_test(config, data_loader_dict):
         model_trainer = trainer.DeepPhysTrainer.DeepPhysTrainer(config, data_loader_dict)
     else:
         raise ValueError('Your Model is Not Supported  Yet!')
+
+    run_config = set_wandb_parameters(yaml_config=config)
+
     wandb.init(project="rPPGToolbox-NIVSDiagnostic-PhysNet", entity="nivs-uom",
-               name=f"{config.TRAIN.MODEL_FILE_NAME}")
+               name=f"{config.TRAIN.MODEL_FILE_NAME}", config=run_config)
     model_trainer.train(data_loader_dict)
     model_trainer.test(data_loader_dict)
     wandb.finish()
@@ -129,6 +132,77 @@ def unsupervised_method_inference(config, data_loader):
             unsupervised_predict(config, data_loader, "PBV")
         else:
             raise ValueError("Not supported unsupervised method!")
+
+
+def set_wandb_parameters(yaml_config):
+    wandb_config_dict = {"config": {}, "train": {}, "valid": {},
+                         "test": {}}
+
+    # TRAIN DICT
+    wandb_config_dict["train"]["batch_size"] = yaml_config.TRAIN.BATCH_SIZE
+    wandb_config_dict["train"]["epochs"] = yaml_config.TRAIN.EPOCHS
+    wandb_config_dict["train"]["lr"] = yaml_config.TRAIN.LR
+    wandb_config_dict["train"]["model_file_name"] = yaml_config.TRAIN.MODEL_FILE_NAME
+    wandb_config_dict["train"]["fs"] = yaml_config.TRAIN.DATA.FS
+    wandb_config_dict["train"]["dataset_name"] = yaml_config.TRAIN.DATA.DATASET
+    wandb_config_dict["train"]["do_preprocess"] = yaml_config.TRAIN.DATA.DO_PREPROCESS
+    wandb_config_dict["train"]["data_format"] = yaml_config.TRAIN.DATA.DATA_FORMAT
+    wandb_config_dict["train"]["data_range"] = f"{yaml_config.TRAIN.DATA.BEGIN} - {yaml_config.TRAIN.DATA.END}"
+    wandb_config_dict["train"]["preprocess_data_type"] = yaml_config.TRAIN.DATA.PREPROCESS.DATA_TYPE
+    wandb_config_dict["train"]["preprocess_label_type"] = yaml_config.TRAIN.DATA.PREPROCESS.LABEL_TYPE
+    wandb_config_dict["train"]["preprocess_do_chunk"] = yaml_config.TRAIN.DATA.PREPROCESS.DO_CHUNK
+    wandb_config_dict["train"]["preprocess_chunk_length"] = yaml_config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH
+    wandb_config_dict["train"]["preprocess_dynamic_detection"] = yaml_config.TRAIN.DATA.PREPROCESS.DYNAMIC_DETECTION
+    wandb_config_dict["train"]["preprocess_dynamic_detection_frequency"] = yaml_config.TRAIN.DATA.PREPROCESS.DYNAMIC_DETECTION_FREQUENCY
+    wandb_config_dict["train"]["preprocess_crop_face"] = yaml_config.TRAIN.DATA.PREPROCESS.CROP_FACE
+    wandb_config_dict["train"]["preprocess_large_face_box"] = yaml_config.TRAIN.DATA.PREPROCESS.LARGE_FACE_BOX
+    wandb_config_dict["train"]["preprocess_large_box_coef"] = yaml_config.TRAIN.DATA.PREPROCESS.LARGE_BOX_COEF
+    wandb_config_dict["train"]["preprocess_data_h_w"] = (yaml_config.TRAIN.DATA.PREPROCESS.H, yaml_config.TRAIN.DATA.PREPROCESS.W)
+
+    # VALID DICT
+    wandb_config_dict["valid"]["fs"] = yaml_config.VALID.DATA.FS
+    wandb_config_dict["valid"]["dataset_name"] = yaml_config.VALID.DATA.DATASET
+    wandb_config_dict["valid"]["do_preprocess"] = yaml_config.VALID.DATA.DO_PREPROCESS
+    wandb_config_dict["valid"]["data_format"] = yaml_config.VALID.DATA.DATA_FORMAT
+    wandb_config_dict["valid"]["data_range"] = f"{yaml_config.VALID.DATA.BEGIN} - {yaml_config.VALID.DATA.END}"
+    wandb_config_dict["valid"]["preprocess_data_type"] = yaml_config.VALID.DATA.PREPROCESS.DATA_TYPE
+    wandb_config_dict["valid"]["preprocess_label_type"] = yaml_config.VALID.DATA.PREPROCESS.LABEL_TYPE
+    wandb_config_dict["valid"]["preprocess_do_chunk"] = yaml_config.VALID.DATA.PREPROCESS.DO_CHUNK
+    wandb_config_dict["valid"]["preprocess_chunk_length"] = yaml_config.VALID.DATA.PREPROCESS.CHUNK_LENGTH
+    wandb_config_dict["valid"]["preprocess_dynamic_detection"] = yaml_config.VALID.DATA.PREPROCESS.DYNAMIC_DETECTION
+    wandb_config_dict["valid"]["preprocess_dynamic_detection_frequency"] = yaml_config.VALID.DATA.PREPROCESS.DYNAMIC_DETECTION_FREQUENCY
+    wandb_config_dict["valid"]["preprocess_crop_face"] = yaml_config.VALID.DATA.PREPROCESS.CROP_FACE
+    wandb_config_dict["valid"]["preprocess_large_face_box"] = yaml_config.VALID.DATA.PREPROCESS.LARGE_FACE_BOX
+    wandb_config_dict["valid"]["preprocess_large_box_coef"] = yaml_config.VALID.DATA.PREPROCESS.LARGE_BOX_COEF
+    wandb_config_dict["valid"]["preprocess_data_h_w"] = (yaml_config.VALID.DATA.PREPROCESS.H, yaml_config.VALID.DATA.PREPROCESS.W)
+
+    # TEST DICT
+    wandb_config_dict["test"]["metrics"] = yaml_config.TEST.METRICS
+    wandb_config_dict["test"]["use_last_epoch"] = yaml_config.TEST.USE_LAST_EPOCH
+    wandb_config_dict["test"]["fs"] = yaml_config.TEST.DATA.FS
+    wandb_config_dict["test"]["dataset_name"] = yaml_config.TEST.DATA.DATASET
+    wandb_config_dict["test"]["do_preprocess"] = yaml_config.TEST.DATA.DO_PREPROCESS
+    wandb_config_dict["test"]["data_format"] = yaml_config.TEST.DATA.DATA_FORMAT
+    wandb_config_dict["test"]["data_range"] = f"{yaml_config.TEST.DATA.BEGIN} - {yaml_config.TEST.DATA.END}"
+    wandb_config_dict["test"]["preprocess_data_type"] = yaml_config.TEST.DATA.PREPROCESS.DATA_TYPE
+    wandb_config_dict["test"]["preprocess_label_type"] = yaml_config.TEST.DATA.PREPROCESS.LABEL_TYPE
+    wandb_config_dict["test"]["preprocess_do_chunk"] = yaml_config.TEST.DATA.PREPROCESS.DO_CHUNK
+    wandb_config_dict["test"]["preprocess_chunk_length"] = yaml_config.TEST.DATA.PREPROCESS.CHUNK_LENGTH
+    wandb_config_dict["test"]["preprocess_dynamic_detection"] = yaml_config.TEST.DATA.PREPROCESS.DYNAMIC_DETECTION
+    wandb_config_dict["test"]["preprocess_dynamic_detection_frequency"] = yaml_config.TEST.DATA.PREPROCESS.DYNAMIC_DETECTION_FREQUENCY
+    wandb_config_dict["test"]["preprocess_crop_face"] = yaml_config.TEST.DATA.PREPROCESS.CROP_FACE
+    wandb_config_dict["test"]["preprocess_large_face_box"] = yaml_config.TEST.DATA.PREPROCESS.LARGE_FACE_BOX
+    wandb_config_dict["test"]["preprocess_large_box_coef"] = yaml_config.TEST.DATA.PREPROCESS.LARGE_BOX_COEF
+    wandb_config_dict["test"]["preprocess_data_h_w"] = (yaml_config.TEST.DATA.PREPROCESS.H, yaml_config.TEST.DATA.PREPROCESS.W)
+
+    # CONFIG FICT
+    wandb_config_dict["config"]["model_drop_rate"] = yaml_config.MODEL.DROP_RATE
+    wandb_config_dict["config"]["model_type"] = yaml_config.MODEL.NAME
+
+    if yaml_config.MODEL.NAME.lower() == "physnet":
+        wandb_config_dict["config"]["physnet_frame_num"] = yaml_config.MODEL.PHYSNET.FRAME_NUM
+
+    return wandb_config_dict
 
 
 if __name__ == "__main__":

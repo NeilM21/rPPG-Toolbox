@@ -229,6 +229,7 @@ def visualize_ppg_pred_gt(gt_ppg, pred_ppg, dataset_name, subj_clip, data_mode, 
         pred_phase = np.unwrap(np.angle(pred_analytic_signal))
         pred_frequency = (np.diff(pred_phase) / (2.0 * np.pi) * ppg_fs)
 
+        # Prepare layout, parameters for Hilbert Transform plots
         fig_hilbert, axs_hilbert = plt.subplot_mosaic([["GT_Envelope_Overlay"],
                                        ["Pred_Envelope_Overlay"],
                                        ["GT_Instantaneous_Frequency"],
