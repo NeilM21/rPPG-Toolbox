@@ -56,9 +56,6 @@ def calculate_metrics(predictions, labels, config, best_model_name=""):
     hilbert_eval_plots_save_path = f"{eval_path}/Hilbert"
     eval_hrs_save_path = f"{eval_path}/Data"
 
-    if not os.path.exists(eval_plots_save_path):
-        os.makedirs(eval_plots_save_path)
-
     for index in predictions.keys():
         prediction = _reform_data_from_dict(predictions[index])
         label = _reform_data_from_dict(labels[index])
@@ -67,7 +64,7 @@ def calculate_metrics(predictions, labels, config, best_model_name=""):
         visualize_ppg_pred_gt(gt_ppg=label, pred_ppg=prediction, dataset_name=config.TEST.DATA.DATASET,
                               subj_clip=index, data_mode=config.TEST.DATA.PREPROCESS.LABEL_TYPE,
                               ppg_save_path=eval_plots_save_path, ppg_fs=config.TEST.DATA.FS, generate_hilbert=True,
-                              hilbert_path=hilbert_eval_plots_save_path)
+                              hilbert_path=hilbert_eval_plots_save_path, method_name=config.MODEL.NAME)
 
         if config.TEST.DATA.PREPROCESS.LABEL_TYPE == "Standardized" or \
                 config.TEST.DATA.PREPROCESS.LABEL_TYPE == "Raw":
@@ -171,10 +168,11 @@ def calculate_metrics(predictions, labels, config, best_model_name=""):
 
 
 def visualize_ppg_pred_gt(gt_ppg, pred_ppg, dataset_name, subj_clip, data_mode, ppg_save_path, ppg_fs,
-                          generate_hilbert=False, hilbert_path=None):
+                          generate_hilbert=False, hilbert_path=None, method_name=None, unsupervised_mode=False):
 
-    gt_ppg = gt_ppg.numpy()
-    pred_ppg = pred_ppg.numpy()
+    if not unsupervised_mode:
+        gt_ppg = gt_ppg.numpy()
+        pred_ppg = pred_ppg.numpy()
 
     # New Viz
     fig_eval, axs_eval = plt.subplot_mosaic([["GT_Pred_PPG_Overlay", "GT_Pred_PPG_Overlay"],
@@ -207,13 +205,18 @@ def visualize_ppg_pred_gt(gt_ppg, pred_ppg, dataset_name, subj_clip, data_mode, 
 
     num_plots = int(video_segments) if video_segments < max_sample_plots else max_sample_plots
 
+    if not os.path.exists(ppg_save_path):
+        os.makedirs(ppg_save_path)
+
     for i in range(num_plots):
         interval_start = np.round((i * seg_length), 3)
         interval_end = np.round(((i+1) * seg_length), 3)
         for _, ax in axs_eval.items():
             ax.set_xlim(interval_start, interval_end)
             ax.set_xlabel("Samples")
-            plt.savefig(f"{ppg_save_path}/{dataset_name}_{subj_clip}_{i}_{data_mode}.png", dpi=200)
+        plt.suptitle(f"\n{method_name} PPG Pred vs. GT for {dataset_name}-{subj_clip}:"
+                     f" segment {i}\n", fontsize='xx-large', weight='extra bold')
+        plt.savefig(f"{ppg_save_path}/{dataset_name}_{subj_clip}_{i}_{data_mode}_{method_name}.png", dpi=200)
 
     plt.close(fig_eval)
 
@@ -266,10 +269,9 @@ def visualize_ppg_pred_gt(gt_ppg, pred_ppg, dataset_name, subj_clip, data_mode, 
             for _, ax in axs_hilbert.items():
                 ax.set_xlim([interval_start, interval_end])
                 ax.set_xlabel("samples")
-            plt.suptitle(f"\nHilbert Transform for {dataset_name}-{subj_clip}: segment {i}\n",
+            plt.suptitle(f"\n{method_name} Hilbert Transform for {dataset_name}-{subj_clip}: segment {i}\n",
                          fontsize='xx-large', weight='extra bold')
-            plt.savefig(f"{hilbert_path}/{dataset_name}_{subj_clip}_{i}_{data_mode}.png", dpi=200)
-
+            plt.savefig(f"{hilbert_path}/{dataset_name}_{subj_clip}_{i}_{data_mode}_{method_name}.png", dpi=200)
         plt.close(fig_hilbert)
 
 

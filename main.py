@@ -3,6 +3,7 @@
 import argparse
 import random
 import time
+import datetime
 
 import numpy as np
 import torch
@@ -12,6 +13,7 @@ from neural_methods import trainer
 from unsupervised_methods.unsupervised_predictor import unsupervised_predict
 from torch.utils.data import DataLoader
 import wandb
+import yaml
 import pickle
 
 RANDOM_SEED = 100
@@ -51,9 +53,12 @@ def add_args(parser):
     #parser.add_argument('--config_file', required=False,
     #                    default="configs/train_configs/PURE_PURE_NIVS_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
 
-    # Pure - UBFC INF
     parser.add_argument('--config_file', required=False,
-                      default="configs/train_configs/PURE_PURE_UBFC_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
+                        default="configs/infer_configs/NIVS_UNSUPERVISED.yaml", type=str, help="The name of the model.")
+
+    # Pure - UBFC INF
+    #parser.add_argument('--config_file', required=False,
+    #                  default="configs/train_configs/PURE_PURE_UBFC_PHYSNET_BASIC.yaml", type=str, help="The name of the model.")
 
     '''Neural Method Sample YAMSL LIST:
       SCAMPS_SCAMPS_UBFC_TSCAN_BASIC.yaml
@@ -90,10 +95,13 @@ def train_and_test(config, data_loader_dict):
     else:
         raise ValueError('Your Model is Not Supported  Yet!')
 
-    run_config = set_wandb_parameters(yaml_config=config)
+    # If a more specific config log is desired (currently tested with PhysNet)
+    #run_config = set_wandb_parameters(yaml_config=config)
+    #wandb.init(project="rPPGToolbox-NIVSDiagnostic-PhysNet", entity="nivs-uom",
+    #           name=f"{config.TRAIN.MODEL_FILE_NAME}", config=config)
 
     wandb.init(project="rPPGToolbox-NIVSDiagnostic-PhysNet", entity="nivs-uom",
-               name=f"{config.TRAIN.MODEL_FILE_NAME}", config=run_config)
+               name=f"{config.TRAIN.MODEL_FILE_NAME}", config=config)
     model_trainer.train(data_loader_dict)
     model_trainer.test(data_loader_dict)
     wandb.finish()
@@ -117,21 +125,43 @@ def test(config, data_loader_dict):
 def unsupervised_method_inference(config, data_loader):
     if not config.UNSUPERVISED.METHOD:
         raise ValueError("Please set unsupervised method in yaml!")
+
+    experiment_name = "NIVS_Unsupervised_FalseFS30_72x72"
+    wandb.init(project="rPPG-Toolbox-Unsupervised", entity="nivs-uom",
+               name=f"{experiment_name}", config=config)
+
+    metrics_wandb_table_dict = dict()
+    datetime_str = '{date:%Y-%m-%d__%H-%M-%S}'.format(date=datetime.datetime.now())
+
+    box_plots = None
     for unsupervised_method in config.UNSUPERVISED.METHOD:
         if unsupervised_method == "POS":
-            unsupervised_predict(config, data_loader, "POS")
+            box_plots = unsupervised_predict(config, data_loader, "POS", datetime_str=datetime_str,
+                                             box_plot_grp=box_plots, eval_table=metrics_wandb_table_dict)
         elif unsupervised_method == "CHROM":
-            unsupervised_predict(config, data_loader, "CHROM")
+            box_plots = unsupervised_predict(config, data_loader, "CHROM", datetime_str=datetime_str,
+                                             box_plot_grp=box_plots, eval_table=metrics_wandb_table_dict)
         elif unsupervised_method == "ICA":
-            unsupervised_predict(config, data_loader, "ICA")
+            box_plots = unsupervised_predict(config, data_loader, "ICA", datetime_str=datetime_str,
+                                             box_plot_grp=box_plots, eval_table=metrics_wandb_table_dict)
         elif unsupervised_method == "GREEN":
-            unsupervised_predict(config, data_loader, "GREEN")
+            box_plots = unsupervised_predict(config, data_loader, "GREEN", datetime_str=datetime_str,
+                                             box_plot_grp=box_plots, eval_table=metrics_wandb_table_dict)
         elif unsupervised_method == "LGI":
-            unsupervised_predict(config, data_loader, "LGI")
+            box_plots = unsupervised_predict(config, data_loader, "LGI", datetime_str=datetime_str,
+                                             box_plot_grp=box_plots, eval_table=metrics_wandb_table_dict)
         elif unsupervised_method == "PBV":
-            unsupervised_predict(config, data_loader, "PBV")
+            box_plots = unsupervised_predict(config, data_loader, "PBV", datetime_str=datetime_str,
+                                             box_plot_grp=box_plots, eval_table=metrics_wandb_table_dict)
         else:
             raise ValueError("Not supported unsupervised method!")
+
+    # for metric in config.UNSUPERVISED.METRICS:
+    #    metrics_wandb_table_dict[metric]  = wandb.Table(columns=["type", "value", "algorithm"])
+    #    wandb.log({"multiline": wandb.plot_table(
+    #        "wandb/line/v0", metrics_wandb_table_dict[metric], {"x": "algorithm", "y": "value", "groupKeys": "type"},
+    #        {"title": f"{metric} test HR Estimate Evaluation"})
+    #    })
 
 
 def set_wandb_parameters(yaml_config):
@@ -358,6 +388,8 @@ if __name__ == "__main__":
             unsupervised_loader = data_loader.SCAMPSLoader.SCAMPSLoader
         elif config.UNSUPERVISED.DATA.DATASET == "MMPD":
             unsupervised_loader = data_loader.MMPDLoader.MMPDLoader
+        elif config.UNSUPERVISED.DATA.DATASET == "NIVS":
+            unsupervised_loader = data_loader.NIVSLoader.NIVSLoader
         else:
             raise ValueError("Unsupported dataset! Currently supporting UBFC, PURE, MMPD, and SCAMPS.")
 
